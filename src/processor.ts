@@ -122,6 +122,7 @@ processor.run(database, async (ctx) => {
     // await ctx.store.save([...entities.get(TokenSwapEvent).values()])
     // TODO POC functionality
     await SquidCache.flush()
+    SquidCache.purge()
 
     for (const [entityClass, entity] of entities) {
         ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
