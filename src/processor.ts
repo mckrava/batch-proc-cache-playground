@@ -22,6 +22,7 @@ import { BaseMapper, EntityClass, EntityMap } from './mappers/baseMapper'
 import { NewPairMapper } from './mappers/factory'
 import { BurnMapper, MintMapper, SwapMapper, SyncMapper, TransferMapper } from './mappers/pairs'
 import { TokenSwapMapper } from './mappers/swapFlashLoan'
+import SquidCache from './utils/squid-cache.ts'
 
 const database = new TypeormDatabase()
 const processor = new SubstrateBatchProcessor()
@@ -56,6 +57,16 @@ const processor = new SubstrateBatchProcessor()
     })
 
 processor.run(database, async (ctx) => {
+    // TODO POC functionality
+    SquidCache.init(ctx, [
+        [UniswapFactory],
+        [Bundle],
+        [Token],
+        [Pair],
+        [LiquidityPosition, { pair: true }],
+        [Transaction],
+        [TokenSwapEvent, { transaction: true, tokenSold: true }],
+    ])
     const mappers: BaseMapper<any>[] = []
 
     for (const block of ctx.blocks) {
@@ -73,31 +84,44 @@ processor.run(database, async (ctx) => {
     const requests = new Map<EntityClass, Set<string>>()
     for (const mapper of mappers) {
         for (const [entityClass, ids] of mapper.getRequest()) {
-            const oldRequest = requests.get(entityClass) || new Set()
-            requests.set(entityClass, new Set([...oldRequest, ...ids]))
+            // const oldRequest = requests.get(entityClass) || new Set()
+            // requests.set(entityClass, new Set([...oldRequest, ...ids]))
+            // TODO POC functionality
+            SquidCache.deferredGet(entityClass, ids)
         }
     }
 
-    const entities = new EntityMap()
-    for (const [entityClass, ids] of requests) {
-        const e: Map<string, any> = await ctx.store
-            .find(entityClass, { where: { id: In([...ids]) } })
-            .then((es) => new Map(es.map((e: any) => [e.id, e])))
-        entities.set(entityClass, e)
-    }
-    entities.set(Token, await ctx.store.find(Token, {}).then((es) => new Map(es.map((e: any) => [e.id, e]))))
+    // const entities = new EntityMap()
+    // for (const [entityClass, ids] of requests) {
+    //     const e: Map<string, any> = await ctx.store
+    //         .find(entityClass, { where: { id: In([...ids]) } })
+    //         .then((es) => new Map(es.map((e: any) => [e.id, e])))
+    //     entities.set(entityClass, e)
+    // }
+
+
+    // entities.set(Token, await ctx.store.find(Token, {}).then((es) => new Map(es.map((e: any) => [e.id, e]))))
+    // TODO POC functionality
+    SquidCache.deferredGet(Token, '*')
+
+    // TODO POC functionality
+    await SquidCache.load()
 
     for (const mapper of mappers) {
-        await mapper.process(entities)
+        // await mapper.process(entities)
+        // TODO POC functionality
+        await mapper.process()
     }
 
-    await ctx.store.save([...entities.get(UniswapFactory).values()])
-    await ctx.store.save([...entities.get(Bundle).values()])
-    await ctx.store.save([...entities.get(Token).values()])
-    await ctx.store.save([...entities.get(Pair).values()])
-    await ctx.store.save([...entities.get(LiquidityPosition).values()])
-    await ctx.store.save([...entities.get(Transaction).values()])
-    await ctx.store.save([...entities.get(TokenSwapEvent).values()])
+    // await ctx.store.save([...entities.get(UniswapFactory).values()])
+    // await ctx.store.save([...entities.get(Bundle).values()])
+    // await ctx.store.save([...entities.get(Token).values()])
+    // await ctx.store.save([...entities.get(Pair).values()])
+    // await ctx.store.save([...entities.get(LiquidityPosition).values()])
+    // await ctx.store.save([...entities.get(Transaction).values()])
+    // await ctx.store.save([...entities.get(TokenSwapEvent).values()])
+    // TODO POC functionality
+    await SquidCache.flush()
 
     for (const [entityClass, entity] of entities) {
         ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
@@ -156,7 +180,11 @@ let lastUpdateTopTimestamp: number | undefined
 
 async function updateTop(ctx: BatchContext<Store, unknown>, block: SubstrateBlock) {
     if (lastUpdateTopTimestamp == null) {
-        const swapStat = await ctx.store.findOneBy(SwapStatPeriod, { id: SwapPeriod.DAY })
+        // const swapStat = await ctx.store.findOneBy(SwapStatPeriod, { id: SwapPeriod.DAY })
+        // TODO POC functionality
+        await SquidCache.deferredGet(SwapStatPeriod, SwapPeriod.DAY).load()
+        const swapStat = SquidCache.get(SwapStatPeriod, SwapPeriod.DAY)
+
         lastUpdateTopTimestamp = swapStat?.to.getTime() || -topUpdateInterval
     }
 
