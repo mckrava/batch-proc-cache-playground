@@ -6,7 +6,8 @@ export abstract class BaseMapper<T> {
 
     constructor(protected ctx: BatchContext<Store, unknown>, protected block: SubstrateBlock) {}
     abstract parse(...args: unknown[]): Promise<this>
-    abstract process(entities: EntityMap): Promise<void>
+    // abstract process(entities: EntityMap): Promise<void>
+    abstract process(): Promise<void>
     abstract getRequest(): Map<EntityClass, string[]>
 }
 

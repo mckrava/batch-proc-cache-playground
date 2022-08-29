@@ -5,6 +5,7 @@ import { EvmLogEvent } from '@subsquid/substrate-processor'
 import * as SwapFlash from '../types/abi/swapFlashLoan'
 import { convertTokenToDecimal } from '../utils/helpers'
 import { BaseMapper, EntityClass, EntityMap } from './baseMapper'
+import SquidCache from '../utils/squid-cache'
 
 interface TokenSwapData {
     txHash: string
@@ -49,17 +50,17 @@ export class TokenSwapMapper extends BaseMapper<TokenSwapData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { poolId, soldId, boughtId, timestamp, soldAmount, boughtAmount, txHash, buyer } = this.data
 
         const usdPrice = 1
 
-        const pool = await getOrCreatePool.call(this, entities, poolId)
+        const pool = await getOrCreatePool.call(this, SquidCache, poolId)
 
-        const tokenSold = await getOrCreateToken.call(this, entities, pool.tokens[soldId])
-        const tokenBought = await getOrCreateToken.call(this, entities, pool.tokens[boughtId])
+        const tokenSold = await getOrCreateToken.call(this, SquidCache, pool.tokens[soldId])
+        const tokenBought = await getOrCreateToken.call(this, SquidCache, pool.tokens[boughtId])
 
         const exchange = new TokenSwapEvent({
             id: 'token_exchange-' + txHash,
@@ -78,6 +79,7 @@ export class TokenSwapMapper extends BaseMapper<TokenSwapData> {
                 .mul(usdPrice),
         })
 
-        entities.get(TokenSwapEvent).set(exchange.id, exchange)
+        // entities.get(TokenSwapEvent).set(exchange.id, exchange)
+        SquidCache.upsert(exchange.id, exchange)
     }
 }

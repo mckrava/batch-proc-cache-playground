@@ -5,6 +5,7 @@ import { Pool } from '../model/generated/pool.model'
 import { Token } from '../model'
 import * as SwapFlash from '../types/abi/swapFlashLoan'
 import { BaseMapper, EntityMap } from '../mappers/baseMapper'
+import SquidCache from '../utils/squid-cache'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -19,22 +20,45 @@ interface SwapInfo {
     lpToken: string
 }
 
-export async function getOrCreatePool(this: BaseMapper<any>, entities: EntityMap, address: string): Promise<Pool> {
-    let pool = entities.get(Pool).get(address)
-    if (pool) return pool
+// export async function getOrCreatePool(this: BaseMapper<any>, entities: EntityMap, address: string): Promise<Pool> {
+//     let pool = entities.get(Pool).get(address)
+//     if (pool) return pool
+//
+//     pool = await this.ctx.store.get(Pool, address)
+//     if (pool) {
+//         entities.get(Pool).set(address, pool)
+//         return pool
+//     }
+//
+//     const info = await getSwapInfo.call(this, address)
+//
+//     pool = new Pool({
+//         id: address.toLowerCase(),
+//         numTokens: info.tokens.length,
+//         tokens: (await registerTokens.call(this, entities, info.tokens)).map((t) => t.id),
+//         a: info.a,
+//         balances: info.balances,
+//         lpToken: info.lpToken,
+//         swapFee: info.swapFee,
+//         adminFee: info.adminFee,
+//         virtualPrice: info.virtualPrice,
+//         owner: info.owner,
+//     })
+//     entities.get(Pool).set(address, pool)
+//
+//     return pool
+// }
 
-    pool = await this.ctx.store.get(Pool, address)
-    if (pool) {
-        entities.get(Pool).set(address, pool)
-        return pool
-    }
+export async function getOrCreatePool(this: BaseMapper<any>, squidCache: typeof SquidCache, address: string): Promise<Pool> {
+    let pool = squidCache.get(Pool, address)
+    if (pool) return pool
 
     const info = await getSwapInfo.call(this, address)
 
     pool = new Pool({
         id: address.toLowerCase(),
         numTokens: info.tokens.length,
-        tokens: (await registerTokens.call(this, entities, info.tokens)).map((t) => t.id),
+        tokens: (await registerTokens.call(this, squidCache, info.tokens)).map((t) => t.id),
         a: info.a,
         balances: info.balances,
         lpToken: info.lpToken,
@@ -43,7 +67,7 @@ export async function getOrCreatePool(this: BaseMapper<any>, entities: EntityMap
         virtualPrice: info.virtualPrice,
         owner: info.owner,
     })
-    entities.get(Pool).set(address, pool)
+    squidCache.upsert(pool)
 
     return pool
 }
