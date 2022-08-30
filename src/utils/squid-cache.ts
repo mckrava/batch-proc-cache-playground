@@ -1,17 +1,32 @@
 import type { FindOptionsRelations } from 'typeorm'
+import { FindManyOptions, Store, EntityClass as EntityClassTypeOrm } from '@subsquid/typeorm-store'
+
 // import { FindOneOptions, EntityClass } from '@subsquid/typeorm-store';
 import { BatchContext, SubstrateBlock } from '@subsquid/substrate-processor'
-import { Store } from '@subsquid/typeorm-store'
-import { FindManyOptions } from '@subsquid/typeorm-store/src/store'
+// import { FindManyOptions } from '@subsquid/typeorm-store/src/store'
 
-export interface EntityClass<T = any> {
+export interface EntityClass<T = any> extends EntityClassTypeOrm<T>{
+    id: string;
     new (): T
 }
 
-type CacheEntityParams = [EntityClass<T>, FindOptionsRelations<T>]
+interface EntityWithId {
+    id: string;
+}
+
+type CacheEntityParams = [EntityClass<EntityWithId>, FindOptionsRelations<EntityClass<EntityWithId>>]
 
 class SquidCache {
     static instance: SquidCache
+
+    private processorContext: BatchContext<Store, unknown> | null = null
+
+    private entityRelationsParams = new Map<string, FindOptionsRelations<EntityClass>>()
+    private entities = new Map<EntityClass, Map<string, EntityClass>>()
+
+    private deferredGetList = new Map<EntityClass, Set<string>>()
+    private deferredFindList = new Map<EntityClass, FindManyOptions<EntityClass>[]>()
+    private deferredRemoveList = new Map<EntityClass, Set<string>>()
 
     /**
      * Initialize cache entities Map and relations config for fetching data in
@@ -23,7 +38,12 @@ class SquidCache {
      * be available for all parent entities automatically. During Cache.flush all relations
      * will be updated as whole cache will be pushed to DB.
      */
-    init(ctx: BatchContext, entityParams: CacheEntityParams[]): void {}
+    init(ctx: BatchContext<Store, unknown>, entityRelationsParams: CacheEntityParams[]): void {
+        this.processorContext = ctx
+        for (const [entityClass, relationParams] of entityRelationsParams) {
+            this.entityRelationsParams.set(entityClass.name, relationParams)
+        }
+    }
 
     /**
      * Get initialized cache instance
@@ -39,6 +59,13 @@ class SquidCache {
      * If idOrList === '*', fetch all available entities.
      */
     deferredGet(entityConstructor: EntityClass, idOrList: string | string[]): SquidCache {
+        const idsList = this.deferredGetList.get(entityConstructor) || new Set()
+
+        for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
+            idsList.add(idItem)
+        }
+        this.deferredGetList.set(entityConstructor, idsList)
+
         return this
     }
 
@@ -48,7 +75,11 @@ class SquidCache {
      * additional check for "soft remove" flag (e.g. additional field
      * "deleted: true" or "active: false")
      */
-    deferredFind(entityConstructor: EntityClass, options: FindManyOptions<EntityClass>): SquidCache {
+    deferredFind<T>(entityConstructor: EntityClass<T>, findOptions: FindManyOptions<T>): SquidCache {
+        this.deferredFindList.set(entityConstructor, [
+            ...(this.deferredFindList.get(entityConstructor) || []),
+            findOptions,
+        ])
         return this
     }
 
@@ -58,15 +89,31 @@ class SquidCache {
      * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
      * Cache.get() method.
      */
-    deferredRemove(entityConstructor: EntityClass, idOrList: string | string[]): SquidCache {
+    deferredRemove<T>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
+        const idsList = this.deferredRemoveList.get(entityConstructor) || new Set()
+
+        for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
+            idsList.add(idItem)
+        }
+        this.deferredRemoveList.set(entityConstructor, idsList)
+
+        const cachedEntities = this.entities.get(entityConstructor) || new Map()
+        let isIntersection = false
+        idsList.forEach((defRemItemId) => {
+            if (cachedEntities.has(defRemItemId)) {
+                cachedEntities.delete(defRemItemId)
+                isIntersection = true
+            }
+        })
+        if (isIntersection) this.entities.set(entityConstructor, cachedEntities)
         return this
     }
 
     /**
      * Get entity by id form cache
      */
-    get(entityConstructor: EntityClass, id: string): EntityClass<T> | null {
-        return null
+    get<T>(entityConstructor: EntityClass<T>, id: string): EntityClass<T> | null {
+        return (this.entities.get(entityConstructor) || new Map()).get(id) || null
     }
 
     /**
@@ -80,20 +127,33 @@ class SquidCache {
      * Set/update item in cache by id
      * (maybe id prop can be omitted as each entity must have id field)
      */
-    upsert(entity: EntityClass<T> | EntityClass<T>[]): void {}
+    upsert<T>(entityOrList: EntityClass<T> | EntityClass<T>[]): void {
+        const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
+            .constructor as EntityClass<T>
+        const existingEntities =
+            this.entities.get(entityClassConstructor) || new Map<string, EntityClass<T>>()
+
+        for (const item of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
+            existingEntities.set(item.id, item)
+        }
+
+        this.entities.set(entityClassConstructor, existingEntities)
+    }
 
     /**
      * If there were upserts after Cache.load()
      */
     isDirty(): boolean {
-        return false
+        return this.deferredGetList.size > 0 || this.deferredFindList.size > 0
     }
 
     /**
-     * Load all deferred get from the db, clear deferredGet items list,
+     * Load all deferred get from the db, clear deferredGet and deferredFindList items list,
      * set loaded items to cache storage.
      */
     load(): Promise<void> {
+        this.deferredGetList.clear()
+        this.deferredFindList.clear()
         return Promise.resolve()
     }
 
@@ -107,7 +167,9 @@ class SquidCache {
     /**
      * Purge current cache.
      */
-    purge(): void {}
+    purge(): void {
+        this.entities.clear()
+    }
 }
 
 export default SquidCache.getInstance()
