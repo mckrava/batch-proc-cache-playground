@@ -1,17 +1,20 @@
 import type { FindOptionsRelations } from 'typeorm'
 import { FindManyOptions, Store, EntityClass as EntityClassTypeOrm } from '@subsquid/typeorm-store'
+import { Between, Not, In, FindOptionsWhere } from 'typeorm'
+import assert from 'assert'
 
 // import { FindOneOptions, EntityClass } from '@subsquid/typeorm-store';
 import { BatchContext, SubstrateBlock } from '@subsquid/substrate-processor'
+import { Entity } from '@subsquid/typeorm-store/src/store'
 // import { FindManyOptions } from '@subsquid/typeorm-store/src/store'
 
-export interface EntityClass<T = any> extends EntityClassTypeOrm<T>{
-    id: string;
+export interface EntityClass<T = any> extends EntityClassTypeOrm<T> {
+    id: string
     new (): T
 }
 
 interface EntityWithId {
-    id: string;
+    id: string
 }
 
 type CacheEntityParams = [EntityClass<EntityWithId>, FindOptionsRelations<EntityClass<EntityWithId>>]
@@ -25,7 +28,7 @@ class SquidCache {
     private entities = new Map<EntityClass, Map<string, EntityClass>>()
 
     private deferredGetList = new Map<EntityClass, Set<string>>()
-    private deferredFindList = new Map<EntityClass, FindManyOptions<EntityClass>[]>()
+    private deferredFindList = new Map<EntityClass, FindOptionsWhere<EntityClass>[]>()
     private deferredRemoveList = new Map<EntityClass, Set<string>>()
 
     /**
@@ -75,10 +78,14 @@ class SquidCache {
      * additional check for "soft remove" flag (e.g. additional field
      * "deleted: true" or "active: false")
      */
-    deferredFind<T>(entityConstructor: EntityClass<T>, findOptions: FindManyOptions<T>): SquidCache {
+    deferredFindWhere<T>(
+        entityConstructor: EntityClass<T>,
+        findOptions: FindOptionsWhere<T> | FindOptionsWhere<T>[]
+    ): SquidCache {
+        const whereOptions = Array.isArray(findOptions) ? findOptions : [findOptions]
         this.deferredFindList.set(entityConstructor, [
             ...(this.deferredFindList.get(entityConstructor) || []),
-            findOptions,
+            ...whereOptions,
         ])
         return this
     }
@@ -130,8 +137,7 @@ class SquidCache {
     upsert<T>(entityOrList: EntityClass<T> | EntityClass<T>[]): void {
         const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
             .constructor as EntityClass<T>
-        const existingEntities =
-            this.entities.get(entityClassConstructor) || new Map<string, EntityClass<T>>()
+        const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, EntityClass<T>>()
 
         for (const item of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
             existingEntities.set(item.id, item)
@@ -151,7 +157,23 @@ class SquidCache {
      * Load all deferred get from the db, clear deferredGet and deferredFindList items list,
      * set loaded items to cache storage.
      */
-    load(): Promise<void> {
+    async load(): Promise<void> {
+        assert(this.processorContext)
+
+        for (const [entityClass, idsSet] of this.deferredGetList.entries()) {
+            const entitiesList: typeof entityClass[] = await this.processorContext.store.find(entityClass, {
+                where: { id: In([...idsSet.values()]) },
+            })
+            this.upsert(entitiesList)
+        }
+
+        for (const [entityClass, findOptionsList] of this.deferredFindList.entries()) {
+            const entitiesList: typeof entityClass[] = await this.processorContext.store.find(entityClass, {
+                where: findOptionsList,
+            })
+            this.upsert(entitiesList)
+        }
+
         this.deferredGetList.clear()
         this.deferredFindList.clear()
         return Promise.resolve()
@@ -160,8 +182,11 @@ class SquidCache {
     /**
      * Persist all updates to the db.
      */
-    flush(): Promise<void> {
-        return Promise.resolve()
+    async flush(): Promise<void> {
+        assert(this.processorContext)
+        for (const entities of this.entities.values()) {
+            await this.processorContext.store.save([...entities.values()])
+        }
     }
 
     /**
