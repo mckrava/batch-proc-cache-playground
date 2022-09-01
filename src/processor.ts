@@ -63,9 +63,9 @@ processor.run(database, async (ctx) => {
         [Bundle],
         [Token],
         [Pair],
-        [LiquidityPosition, { pair: true }],
+        [LiquidityPosition, { pair: Pair }],
         [Transaction],
-        [TokenSwapEvent, { transaction: true, tokenSold: true }],
+        [TokenSwapEvent, { transaction: Transaction, tokenSold: Token }],
     ])
     const mappers: BaseMapper<any>[] = []
 
@@ -98,7 +98,6 @@ processor.run(database, async (ctx) => {
     //         .then((es) => new Map(es.map((e: any) => [e.id, e])))
     //     entities.set(entityClass, e)
     // }
-
 
     // entities.set(Token, await ctx.store.find(Token, {}).then((es) => new Map(es.map((e: any) => [e.id, e]))))
     // TODO POC functionality
