@@ -1,35 +1,43 @@
-import type { FindOptionsRelations } from 'typeorm'
-import { FindManyOptions, Store, EntityClass as EntityClassTypeOrm } from '@subsquid/typeorm-store'
-import { Between, Not, In, FindOptionsWhere } from 'typeorm'
+import { Store, EntityClass } from '@subsquid/typeorm-store'
+import { In, FindOptionsWhere } from 'typeorm'
 import assert from 'assert'
+import { BatchContext } from '@subsquid/substrate-processor'
 
-// import { FindOneOptions, EntityClass } from '@subsquid/typeorm-store';
-import { BatchContext, SubstrateBlock } from '@subsquid/substrate-processor'
-import { Entity } from '@subsquid/typeorm-store/src/store'
 // import { FindManyOptions } from '@subsquid/typeorm-store/src/store'
+// import type { FindOptionsRelations, FindOneOptions } from 'typeorm'
+// import { FindOneOptions, EntityClass } from '@subsquid/typeorm-store';
 
-export interface EntityClass<T = any> extends EntityClassTypeOrm<T> {
-    id: string
-    new (): T
-}
+type EntityLike = { id: string }
 
-interface EntityWithId {
-    id: string
-}
+type EntityClassConstructable = EntityClass<EntityLike>
 
-type CacheEntityParams = [EntityClass<EntityWithId>, FindOptionsRelations<EntityClass<EntityWithId>>]
+type CacheEntityParams = [
+    EntityClassConstructable,
+    Record<keyof EntityClassConstructable, EntityClassConstructable> | undefined
+] // Inherited from FindOneOptions['loadRelationIds']['relations']
+
+type UpsetEntityOrList<T extends EntityLike> = EntityClass<T> | EntityClass<T>[] | CachedModel<T> | CachedModel<T>[]
+
+type CachedModel<T> = {
+    [P in keyof T]: Exclude<T[P], null | undefined> extends EntityLike
+        ? null | undefined extends T[P]
+            ? string | null | undefined
+            : string
+        : T[P]
+} &
+    EntityLike
 
 class SquidCache {
     static instance: SquidCache
 
     private processorContext: BatchContext<Store, unknown> | null = null
 
-    private entityRelationsParams = new Map<string, FindOptionsRelations<EntityClass>>()
-    private entities = new Map<EntityClass, Map<string, EntityClass>>()
+    private entityRelationsParams = new Map<EntityClassConstructable, Record<string, EntityClassConstructable> | null>()
+    private entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>()
 
-    private deferredGetList = new Map<EntityClass, Set<string>>()
-    private deferredFindList = new Map<EntityClass, FindOptionsWhere<EntityClass>[]>()
-    private deferredRemoveList = new Map<EntityClass, Set<string>>()
+    private deferredGetList = new Map<EntityClassConstructable, Set<string>>()
+    private deferredFindList = new Map<EntityClassConstructable, FindOptionsWhere<EntityClassConstructable>[]>()
+    private deferredRemoveList = new Map<EntityClassConstructable, Set<string>>()
 
     /**
      * Initialize cache entities Map and relations config for fetching data in
@@ -44,7 +52,7 @@ class SquidCache {
     init(ctx: BatchContext<Store, unknown>, entityRelationsParams: CacheEntityParams[]): void {
         this.processorContext = ctx
         for (const [entityClass, relationParams] of entityRelationsParams) {
-            this.entityRelationsParams.set(entityClass.name, relationParams)
+            this.entityRelationsParams.set(entityClass, relationParams || null)
         }
     }
 
@@ -61,7 +69,7 @@ class SquidCache {
      * (keeps items as Map structure).
      * If idOrList === '*', fetch all available entities.
      */
-    deferredGet(entityConstructor: EntityClass, idOrList: string | string[]): SquidCache {
+    deferredGet<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
         const idsList = this.deferredGetList.get(entityConstructor) || new Set()
 
         for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
@@ -78,7 +86,7 @@ class SquidCache {
      * additional check for "soft remove" flag (e.g. additional field
      * "deleted: true" or "active: false")
      */
-    deferredFindWhere<T>(
+    deferredFindWhere<T extends EntityLike>(
         entityConstructor: EntityClass<T>,
         findOptions: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     ): SquidCache {
@@ -96,7 +104,7 @@ class SquidCache {
      * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
      * Cache.get() method.
      */
-    deferredRemove<T>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
+    deferredRemove<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
         const idsList = this.deferredRemoveList.get(entityConstructor) || new Set()
 
         for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
@@ -119,7 +127,7 @@ class SquidCache {
     /**
      * Get entity by id form cache
      */
-    get<T>(entityConstructor: EntityClass<T>, id: string): EntityClass<T> | null {
+    get<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): EntityClass<T> | null {
         return (this.entities.get(entityConstructor) || new Map()).get(id) || null
     }
 
@@ -134,12 +142,13 @@ class SquidCache {
      * Set/update item in cache by id
      * (maybe id prop can be omitted as each entity must have id field)
      */
-    upsert<T>(entityOrList: EntityClass<T> | EntityClass<T>[]): void {
+    upsert<T extends EntityLike>(entityOrList: UpsetEntityOrList<T>): void {
         const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
             .constructor as EntityClass<T>
-        const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, EntityClass<T>>()
+        const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>()
 
         for (const item of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
+            // @ts-ignore
             existingEntities.set(item.id, item)
         }
 
@@ -147,7 +156,7 @@ class SquidCache {
     }
 
     /**
-     * If there were upserts after Cache.load()
+     * If there were upsets after Cache.load()
      */
     isDirty(): boolean {
         return this.deferredGetList.size > 0 || this.deferredFindList.size > 0
@@ -160,18 +169,91 @@ class SquidCache {
     async load(): Promise<void> {
         assert(this.processorContext)
 
-        for (const [entityClass, idsSet] of this.deferredGetList.entries()) {
-            const entitiesList: typeof entityClass[] = await this.processorContext.store.find(entityClass, {
-                where: { id: In([...idsSet.values()]) },
+        for (const [entityClass, findOptionsList] of this.deferredFindList.entries()) {
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+
+            const entitiesList = await this.processorContext.store.find(entityClass, {
+                where: findOptionsList,
+                ...(!!entityRelationsOptions && {
+                    loadRelationIds: {
+                        relations: Object.keys(entityRelationsOptions || {}) || [],
+                    },
+                }),
             })
             this.upsert(entitiesList)
         }
 
-        for (const [entityClass, findOptionsList] of this.deferredFindList.entries()) {
-            const entitiesList: typeof entityClass[] = await this.processorContext.store.find(entityClass, {
-                where: findOptionsList,
-            })
+        for (const [entityClass, idsSet] of this.deferredGetList.entries()) {
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+
+            /**
+             * Filter items by "id" which are already fetched accordingly "deferredFindList".
+             * As result avoid duplicated fetch.
+             */
+            const filteredIds = [...idsSet.values()].filter(
+                (id) => !(this.entities.get(entityClass) || new Set<string>()).has(id)
+            )
+
+            const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
+                entityClass,
+                {
+                    where: { id: In(filteredIds) },
+                    // @ts-ignore
+                    ...(!!entityRelationsOptions && {
+                        loadRelationIds: {
+                            relations: Object.keys(entityRelationsOptions || {}) || [],
+                        },
+                    }),
+                }
+            )
+
             this.upsert(entitiesList)
+        }
+
+        /**
+         * Separate list of relations from all deferredGet items for further load
+         */
+        const relationsEntitiesIdsMap = new Map<EntityClassConstructable, Set<string>>()
+
+        /**
+         * Collect entity relations IDs.
+         */
+        for (const [entityClass, entitiesMap] of this.entities.entries()) {
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+
+            if (entitiesMap.size === 0 || !entityRelationsOptions) continue
+
+            for (const entityItem of entitiesMap.values()) {
+                for (const relationName in entityRelationsOptions) {
+                    const relationEntityClass = entityRelationsOptions[relationName]
+                    const relationEntityId = entityItem[relationName as keyof CachedModel<EntityClassConstructable>]
+                    /**
+                     * If entity is already loaded, we need avoid extra fetch.
+                     */
+                    if ((this.entities.get(relationEntityClass) || new Map()).has(relationEntityId)) continue
+
+                    relationsEntitiesIdsMap.set(
+                        relationEntityClass,
+                        (relationsEntitiesIdsMap.get(relationEntityClass) || new Set()).add(relationEntityId)
+                    )
+                }
+            }
+        }
+
+        if (relationsEntitiesIdsMap.size > 0) {
+            /**
+             * Fetch relations in this load flow is ignored and only one level of relations are supported.
+             */
+            for (const [entityClass, idsSet] of relationsEntitiesIdsMap.entries()) {
+                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
+                    entityClass,
+                    {
+                        where: { id: In([...idsSet.values()]) },
+                    }
+                )
+
+                this.upsert(entitiesList)
+            }
         }
 
         this.deferredGetList.clear()
