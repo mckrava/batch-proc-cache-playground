@@ -20,24 +20,24 @@ export class Token {
   @Column_("int4", {nullable: false})
   decimals!: number
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalSupply!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   tradeVolume!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   tradeVolumeUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   untrackedVolumeUSD!: BigDecimal
 
   @Column_("int4", {nullable: false})
   txCount!: number
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalLiquidity!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   derivedETH!: BigDecimal
 }

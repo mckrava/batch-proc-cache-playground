@@ -59,13 +59,13 @@ export async function getSwapInfo(this: BaseMapper<any>, address: string): Promi
     while (true) {
         try {
             const t = await swapContract.getToken(i)
-            const b = (await swapContract.getTokenBalance(i)).toBigInt()
+            const b = await swapContract.getTokenBalance(i)
 
             if (t != ZERO_ADDRESS) {
-                tokens.push(t)
+                tokens.push(t.toLowerCase())
             }
 
-            balances.push(b)
+            balances.push(b.toBigInt())
 
             i++
         } catch (e) {

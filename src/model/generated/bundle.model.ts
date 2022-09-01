@@ -11,6 +11,6 @@ export class Bundle {
   @PrimaryColumn_()
   id!: string
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   ethPrice!: BigDecimal
 }

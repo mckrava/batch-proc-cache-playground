@@ -14,6 +14,7 @@ import {
     Token,
     LiquidityPosition,
     Transaction,
+    Pool,
 } from './model'
 import { SwapStatPeriod, SwapPeriod } from './model/custom/swapStat'
 import { Between, Not, In } from 'typeorm'
@@ -38,11 +39,11 @@ const processor = new SubstrateBatchProcessor()
     .addEvmLog('*', {
         filter: [
             [
-                pair.events['Transfer(address,address,uint256)'].topic,
+                // pair.events['Transfer(address,address,uint256)'].topic,
                 pair.events['Sync(uint112,uint112)'].topic,
                 pair.events['Swap(address,uint256,uint256,uint256,uint256,address)'].topic,
-                pair.events['Mint(address,uint256,uint256)'].topic,
-                pair.events['Burn(address,uint256,uint256,address)'].topic,
+                // pair.events['Mint(address,uint256,uint256)'].topic,
+                // pair.events['Burn(address,uint256,uint256,address)'].topic,
             ],
         ],
     })
@@ -95,6 +96,7 @@ processor.run(database, async (ctx) => {
     await ctx.store.save([...entities.get(Bundle).values()])
     await ctx.store.save([...entities.get(Token).values()])
     await ctx.store.save([...entities.get(Pair).values()])
+    await ctx.store.save([...entities.get(Pool).values()])
     await ctx.store.save([...entities.get(LiquidityPosition).values()])
     await ctx.store.save([...entities.get(Transaction).values()])
     await ctx.store.save([...entities.get(TokenSwapEvent).values()])

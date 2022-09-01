@@ -58,8 +58,8 @@ export class TokenSwapMapper extends BaseMapper<TokenSwapData> {
 
         const pool = await getOrCreatePool.call(this, entities, poolId)
 
-        const tokenSold = await getOrCreateToken.call(this, entities, pool.tokens[soldId])
-        const tokenBought = await getOrCreateToken.call(this, entities, pool.tokens[boughtId])
+        const tokenSold = await getOrCreateToken.call(this, entities, pool.tokens[soldId].toLowerCase())
+        const tokenBought = await getOrCreateToken.call(this, entities, pool.tokens[boughtId].toLowerCase())
 
         const exchange = new TokenSwapEvent({
             id: 'token_exchange-' + txHash,

@@ -461,36 +461,36 @@ export class SwapMapper extends BaseMapper<SwapData> {
         const reserve0USD = pair.reserve0.times(price0)
         const reserve1USD = pair.reserve1.times(price1)
 
-        // if less than 5 LPs, require high minimum reserve amount amount or return 0
-        if (
-            pair.liquidityProviderCount < 5 &&
-            ((WHITELIST.includes(token0.id) &&
-                WHITELIST.includes(token1.id) &&
-                reserve0USD.plus(reserve1USD).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
-                (WHITELIST.includes(token0.id) &&
-                    !WHITELIST.includes(token1.id) &&
-                    reserve0USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
-                (!WHITELIST.includes(token0.id) &&
-                    WHITELIST.includes(token1.id) &&
-                    reserve1USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)))
-        ) {
-            // do nothing
-        } else {
-            // both are whitelist tokens, take average of both amounts
-            if (WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount0Total.times(price0).plus(amount1Total.times(price1)).div(2)
-            }
-
-            // take full value of the whitelisted token amount
-            if (WHITELIST.includes(token0.id) && !WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount0Total.times(price0)
-            }
-
-            // take full value of the whitelisted token amount
-            if (!WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount1Total.times(price1)
-            }
+        // // if less than 5 LPs, require high minimum reserve amount amount or return 0
+        // if (
+        //     pair.liquidityProviderCount < 5 &&
+        //     ((WHITELIST.includes(token0.id) &&
+        //         WHITELIST.includes(token1.id) &&
+        //         reserve0USD.plus(reserve1USD).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
+        //         (WHITELIST.includes(token0.id) &&
+        //             !WHITELIST.includes(token1.id) &&
+        //             reserve0USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
+        //         (!WHITELIST.includes(token0.id) &&
+        //             WHITELIST.includes(token1.id) &&
+        //             reserve1USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)))
+        // ) {
+        //     // do nothing
+        // } else {
+        // both are whitelist tokens, take average of both amounts
+        if (WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount0Total.times(price0).plus(amount1Total.times(price1)).div(2)
         }
+
+        // take full value of the whitelisted token amount
+        if (WHITELIST.includes(token0.id) && !WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount0Total.times(price0)
+        }
+
+        // take full value of the whitelisted token amount
+        if (!WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount1Total.times(price1)
+        }
+        // }
 
         const trackedAmountETH = bundle.ethPrice.eq(ZERO_BD) ? ZERO_BD : trackedAmountUSD.div(bundle.ethPrice)
         // update token0 global volume and token liquidity stats

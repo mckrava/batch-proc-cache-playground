@@ -20,6 +20,6 @@ export class LiquidityPosition {
   @ManyToOne_(() => Pair, {nullable: true})
   pair!: Pair
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   liquidityTokenBalance!: BigDecimal
 }
