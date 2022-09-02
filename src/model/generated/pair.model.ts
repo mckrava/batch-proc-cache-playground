@@ -28,40 +28,40 @@ export class Pair {
   @ManyToOne_(() => Token, {nullable: true})
   token1!: Token
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   reserve0!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   reserve1!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalSupply!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   reserveETH!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   reserveUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   trackedReserveETH!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   token0Price!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   token1Price!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   volumeToken0!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   volumeToken1!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   volumeUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   untrackedVolumeUSD!: BigDecimal
 
   @Column_("int4", {nullable: false})

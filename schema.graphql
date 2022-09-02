@@ -133,7 +133,7 @@ type TokenSwapEvent @entity {
   id: ID!
 
   transaction: Transaction
-  timestamp: DateTime!
+  timestamp: DateTime! @index
   
   pair: Pair
   pairId: ID
@@ -141,7 +141,7 @@ type TokenSwapEvent @entity {
   pool: Pool
   poolId: ID
 
-  buyer: String!
+  buyer: String! @index
   tokenSold: Token!
   soldAmount: BigInt!
   tokenBought: Token!

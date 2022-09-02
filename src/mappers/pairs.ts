@@ -7,6 +7,7 @@ import { convertTokenToDecimal, createLiquidityPosition } from '../utils/helpers
 import { BaseMapper, EntityClass, EntityMap } from './baseMapper'
 import assert from 'assert'
 import { getOrCreateToken } from '../entities/token'
+import SquidCache from '../utils/squid-cache'
 
 const transferEventAbi = pairAbi.events['Transfer(address,address,uint256)']
 
@@ -57,20 +58,22 @@ export class TransferMapper extends BaseMapper<TransferData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { txHash, pairId, blockNumber, timestamp, fromId, toId } = this.data
 
         // get pair and load contract
-        const pair = entities.get(Pair).get(pairId)
+        // const pair = entities.get(Pair).get(pairId)
+        const pair = SquidCache.get(Pair, pairId)
         assert(pair != null)
 
         // liquidity token amount being transfered
         const value = convertTokenToDecimal(this.data.amount, 18)
 
         // get or create transaction
-        let transaction = entities.get(Transaction).get(txHash)
+        // let transaction = entities.get(Transaction).get(txHash)
+        let transaction = SquidCache.get(Transaction, txHash)
         if (transaction == null) {
             transaction = new Transaction({
                 id: txHash,
@@ -80,7 +83,7 @@ export class TransferMapper extends BaseMapper<TransferData> {
                 burns: [],
                 swaps: [],
             })
-            entities.get(Transaction).set(txHash, transaction)
+            SquidCache.upsert(transaction)
         }
 
         // mints
@@ -94,22 +97,22 @@ export class TransferMapper extends BaseMapper<TransferData> {
         }
 
         if (fromId !== ADDRESS_ZERO && fromId !== pair.id) {
-            if (!entities.get(LiquidityPosition).has(`${pairId}-${fromId}`)) {
+            if (!SquidCache.has(LiquidityPosition, `${pairId}-${fromId}`)) {
                 const position = createLiquidityPosition({
                     pair,
                     user: fromId,
                 })
-                entities.get(LiquidityPosition).set(position.id, position)
+                SquidCache.upsert(position)
             }
         }
 
         if (toId !== ADDRESS_ZERO && toId !== pair.id) {
-            if (!entities.get(LiquidityPosition).has(`${pairId}-${toId}`)) {
+            if (!SquidCache.has(LiquidityPosition, `${pairId}-${toId}`)) {
                 const position = createLiquidityPosition({
                     pair,
                     user: fromId,
                 })
-                entities.get(LiquidityPosition).set(position.id, position)
+                SquidCache.upsert(position)
             }
         }
     }
@@ -148,23 +151,23 @@ export class SyncMapper extends BaseMapper<SyncData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { pairId, reserve0, reserve1 } = this.data
 
         // get pair and load contract
-        const pair = entities.get(Pair).get(pairId)
+        const pair = SquidCache.get(Pair, pairId)
         assert(pair != null)
 
-        const bundle = entities.get(Bundle).get('1')
+        const bundle = SquidCache.get(Bundle, '1')
         assert(bundle != null)
 
-        const uniswap = entities.get(UniswapFactory).get(FACTORY_ADDRESS)
+        const uniswap = SquidCache.get(UniswapFactory, FACTORY_ADDRESS)
         assert(uniswap != null)
 
-        const token0 = await getOrCreateToken.call(this, entities, pair.token0Id)
-        const token1 = await getOrCreateToken.call(this, entities, pair.token1Id)
+        const token0 = await getOrCreateToken.call(this, pair.token0Id)
+        const token1 = await getOrCreateToken.call(this, pair.token1Id)
 
         // reset factory liquidity by subtracting onluy tarcked liquidity
         uniswap.totalLiquidityETH = uniswap.totalLiquidityETH.minus(pair.trackedReserveETH)
@@ -180,10 +183,10 @@ export class SyncMapper extends BaseMapper<SyncData> {
         pair.token1Price = !pair.reserve0.eq(ZERO_BD) ? pair.reserve1.div(pair.reserve0) : ZERO_BD
 
         // update ETH price now that reserves could have changed
-        bundle.ethPrice = await getEthPriceInUSD.call(this, entities)
+        bundle.ethPrice = await getEthPriceInUSD.call(this)
 
-        token0.derivedETH = await findEthPerToken.call(this, entities, token0.id)
-        token1.derivedETH = await findEthPerToken.call(this, entities, token1.id)
+        token0.derivedETH = await findEthPerToken.call(this, token0.id)
+        token1.derivedETH = await findEthPerToken.call(this, token1.id)
 
         let trackedLiquidityETH = ZERO_BD
         if (!bundle.ethPrice.eq(ZERO_BD)) {
@@ -220,6 +223,8 @@ export class SyncMapper extends BaseMapper<SyncData> {
         // now correctly set liquidity amounts for each token
         token0.totalLiquidity = token0.totalLiquidity.plus(pair.reserve0)
         token1.totalLiquidity = token1.totalLiquidity.plus(pair.reserve1)
+
+        // TODO what's happening here?
     }
 }
 
@@ -257,23 +262,23 @@ export class MintMapper extends BaseMapper<MintData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { pairId, fromId } = this.data
 
         // get pair and load contract
-        const pair = entities.get(Pair).get(pairId)
+        const pair = SquidCache.get(Pair, pairId)
         assert(pair != null)
 
-        const bundle = entities.get(Bundle).get('1')
+        const bundle = SquidCache.get(Bundle, '1')
         assert(bundle != null)
 
-        const uniswap = entities.get(UniswapFactory).get(FACTORY_ADDRESS)
+        const uniswap = SquidCache.get(UniswapFactory, FACTORY_ADDRESS)
         assert(uniswap != null)
 
-        const token0 = await getOrCreateToken.call(this, entities, pair.token0Id)
-        const token1 = await getOrCreateToken.call(this, entities, pair.token1Id)
+        const token0 = await getOrCreateToken.call(this, pair.token0Id)
+        const token1 = await getOrCreateToken.call(this, pair.token1Id)
 
         token0.txCount += 1
 
@@ -287,12 +292,12 @@ export class MintMapper extends BaseMapper<MintData> {
 
         // update the LP position
 
-        if (!entities.get(LiquidityPosition).has(`${pairId}-${fromId}`)) {
+        if (!SquidCache.has(LiquidityPosition, `${pairId}-${fromId}`)) {
             const position = createLiquidityPosition({
                 pair,
                 user: fromId,
             })
-            entities.get(LiquidityPosition).set(position.id, position)
+            SquidCache.upsert(position)
         }
     }
 }
@@ -331,23 +336,23 @@ export class BurnMapper extends BaseMapper<BurnData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { pairId, fromId } = this.data
 
         // get pair and load contract
-        const pair = entities.get(Pair).get(pairId)
+        const pair = SquidCache.get(Pair, pairId)
         assert(pair != null)
 
-        const bundle = entities.get(Bundle).get('1')
+        const bundle = SquidCache.get(Bundle, '1')
         assert(bundle != null)
 
-        const uniswap = entities.get(UniswapFactory).get(FACTORY_ADDRESS)
+        const uniswap = SquidCache.get(UniswapFactory, FACTORY_ADDRESS)
         assert(uniswap != null)
 
-        const token0 = await getOrCreateToken.call(this, entities, pair.token0Id)
-        const token1 = await getOrCreateToken.call(this, entities, pair.token1Id)
+        const token0 = await getOrCreateToken.call(this, pair.token0Id)
+        const token1 = await getOrCreateToken.call(this, pair.token1Id)
 
         token0.txCount += 1
 
@@ -361,12 +366,12 @@ export class BurnMapper extends BaseMapper<BurnData> {
 
         // update the LP position
 
-        if (!entities.get(LiquidityPosition).has(`${pairId}-${fromId}`)) {
+        if (!SquidCache.has(LiquidityPosition, `${pairId}-${fromId}`)) {
             const position = createLiquidityPosition({
                 pair,
                 user: fromId,
             })
-            entities.get(LiquidityPosition).set(position.id, position)
+            SquidCache.upsert(position)
         }
     }
 }
@@ -421,26 +426,26 @@ export class SwapMapper extends BaseMapper<SwapData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { pairId, fromId, txHash, timestamp, blockNumber } = this.data
 
-        const pair = entities.get(Pair).get(pairId)
+        const pair = SquidCache.get(Pair, pairId)
         assert(pair != null)
 
-        const bundle = entities.get(Bundle).get('1')
+        const bundle = SquidCache.get(Bundle, '1')
         assert(bundle != null)
 
-        const uniswap = entities.get(UniswapFactory).get(FACTORY_ADDRESS)
+        const uniswap = SquidCache.get(UniswapFactory, FACTORY_ADDRESS)
         assert(uniswap != null)
 
-        const token0 = await getOrCreateToken.call(this, entities, pair.token0Id)
+        const token0 = await getOrCreateToken.call(this, pair.token0Id)
         const amount0In = convertTokenToDecimal(this.data.amount0In, token0.decimals)
         const amount0Out = convertTokenToDecimal(this.data.amount0Out, token0.decimals)
         const amount0Total = amount0Out.plus(amount0In)
 
-        const token1 = await getOrCreateToken.call(this, entities, pair.token1Id)
+        const token1 = await getOrCreateToken.call(this, pair.token1Id)
         const amount1In = convertTokenToDecimal(this.data.amount1In, token1.decimals)
         const amount1Out = convertTokenToDecimal(this.data.amount1Out, token1.decimals)
         const amount1Total = amount1Out.plus(amount1In)
@@ -461,36 +466,36 @@ export class SwapMapper extends BaseMapper<SwapData> {
         const reserve0USD = pair.reserve0.times(price0)
         const reserve1USD = pair.reserve1.times(price1)
 
-        // if less than 5 LPs, require high minimum reserve amount amount or return 0
-        if (
-            pair.liquidityProviderCount < 5 &&
-            ((WHITELIST.includes(token0.id) &&
-                WHITELIST.includes(token1.id) &&
-                reserve0USD.plus(reserve1USD).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
-                (WHITELIST.includes(token0.id) &&
-                    !WHITELIST.includes(token1.id) &&
-                    reserve0USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
-                (!WHITELIST.includes(token0.id) &&
-                    WHITELIST.includes(token1.id) &&
-                    reserve1USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)))
-        ) {
-            // do nothing
-        } else {
-            // both are whitelist tokens, take average of both amounts
-            if (WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount0Total.times(price0).plus(amount1Total.times(price1)).div(2)
-            }
-
-            // take full value of the whitelisted token amount
-            if (WHITELIST.includes(token0.id) && !WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount0Total.times(price0)
-            }
-
-            // take full value of the whitelisted token amount
-            if (!WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
-                trackedAmountUSD = amount1Total.times(price1)
-            }
+        // // if less than 5 LPs, require high minimum reserve amount amount or return 0
+        // if (
+        //     pair.liquidityProviderCount < 5 &&
+        //     ((WHITELIST.includes(token0.id) &&
+        //         WHITELIST.includes(token1.id) &&
+        //         reserve0USD.plus(reserve1USD).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
+        //         (WHITELIST.includes(token0.id) &&
+        //             !WHITELIST.includes(token1.id) &&
+        //             reserve0USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)) ||
+        //         (!WHITELIST.includes(token0.id) &&
+        //             WHITELIST.includes(token1.id) &&
+        //             reserve1USD.times(2).lt(MINIMUM_USD_THRESHOLD_NEW_PAIRS)))
+        // ) {
+        //     // do nothing
+        // } else {
+        // both are whitelist tokens, take average of both amounts
+        if (WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount0Total.times(price0).plus(amount1Total.times(price1)).div(2)
         }
+
+        // take full value of the whitelisted token amount
+        if (WHITELIST.includes(token0.id) && !WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount0Total.times(price0)
+        }
+
+        // take full value of the whitelisted token amount
+        if (!WHITELIST.includes(token0.id) && WHITELIST.includes(token1.id)) {
+            trackedAmountUSD = amount1Total.times(price1)
+        }
+        // }
 
         const trackedAmountETH = bundle.ethPrice.eq(ZERO_BD) ? ZERO_BD : trackedAmountUSD.div(bundle.ethPrice)
         // update token0 global volume and token liquidity stats
@@ -517,7 +522,7 @@ export class SwapMapper extends BaseMapper<SwapData> {
         uniswap.untrackedVolumeUSD = uniswap.untrackedVolumeUSD.plus(derivedAmountUSD)
         uniswap.txCount += 1
 
-        let transaction = entities.get(Transaction).get(txHash)
+        let transaction = SquidCache.get(Transaction, txHash)
         if (transaction == null) {
             transaction = new Transaction({
                 id: txHash,
@@ -527,7 +532,7 @@ export class SwapMapper extends BaseMapper<SwapData> {
                 swaps: [],
                 burns: [],
             })
-            entities.get(Transaction).set(txHash, transaction)
+            SquidCache.upsert(transaction)
         }
 
         const swapId = `${transaction.id}-${transaction.swaps.length}`
@@ -552,6 +557,6 @@ export class SwapMapper extends BaseMapper<SwapData> {
             amountUSD: trackedAmountUSD.eq(ZERO_BD) ? derivedAmountUSD : trackedAmountUSD,
         })
 
-        entities.get(TokenSwapEvent).set(swap.id, swap)
+        SquidCache.upsert(swap)
     }
 }

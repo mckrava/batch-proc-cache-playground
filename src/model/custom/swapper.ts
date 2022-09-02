@@ -17,12 +17,12 @@ export class Swapper {
     @Column_('varchar', { length: 5, nullable: false })
     type!: SwapperType
 
-    @Column_('numeric', { nullable: false, precision: 38, scale: 20 })
+    @Column_('numeric', { nullable: false })
     dayAmountUSD!: string
 
-    @Column_('numeric', { nullable: false, precision: 38, scale: 20 })
+    @Column_('numeric', { nullable: false })
     weekAmountUSD!: string
 
-    @Column_('numeric', { nullable: false, precision: 38, scale: 20 })
+    @Column_('numeric', { nullable: false })
     monthAmountUSD!: string
 }

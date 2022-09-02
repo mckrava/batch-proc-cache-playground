@@ -11,12 +11,11 @@ type EntityLike = { id: string }
 
 type EntityClassConstructable = EntityClass<EntityLike>
 
-type CacheEntityParams = [
-    EntityClassConstructable,
-    Record<keyof EntityClassConstructable, EntityClassConstructable> | undefined
-] // Inherited from FindOneOptions['loadRelationIds']['relations']
+type CacheEntityParams =
+    | EntityClassConstructable
+    | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>] // Inherited from FindOneOptions['loadRelationIds']['relations']
 
-type UpsetEntityOrList<T extends EntityLike> = EntityClass<T> | EntityClass<T>[] | CachedModel<T> | CachedModel<T>[]
+type UpsetEntityOrList<T extends EntityLike> = EntityClass<T> | EntityClass<T>[]
 
 type CachedModel<T> = {
     [P in keyof T]: Exclude<T[P], null | undefined> extends EntityLike
@@ -36,7 +35,7 @@ class SquidCache {
     private entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>()
 
     private deferredGetList = new Map<EntityClassConstructable, Set<string>>()
-    private deferredFindList = new Map<EntityClassConstructable, FindOptionsWhere<EntityClassConstructable>[]>()
+    private deferredFindWhereList = new Map<EntityClassConstructable, FindOptionsWhere<EntityClassConstructable>[]>()
     private deferredRemoveList = new Map<EntityClassConstructable, Set<string>>()
 
     /**
@@ -51,8 +50,12 @@ class SquidCache {
      */
     init(ctx: BatchContext<Store, unknown>, entityRelationsParams: CacheEntityParams[]): void {
         this.processorContext = ctx
-        for (const [entityClass, relationParams] of entityRelationsParams) {
-            this.entityRelationsParams.set(entityClass, relationParams || null)
+        for (const paramsItem of entityRelationsParams) {
+            if (Array.isArray(paramsItem)) {
+                this.entityRelationsParams.set(paramsItem[0], paramsItem[1])
+            } else {
+                this.entityRelationsParams.set(paramsItem, null)
+            }
         }
     }
 
@@ -69,7 +72,11 @@ class SquidCache {
      * (keeps items as Map structure).
      * If idOrList === '*', fetch all available entities.
      */
-    deferredGet<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
+    deferredGet<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): SquidCache {
+        if (!idOrList) {
+            this.deferredGetList.set(entityConstructor, new Set<string>().add('*'))
+            return this
+        }
         const idsList = this.deferredGetList.get(entityConstructor) || new Set()
 
         for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
@@ -91,8 +98,8 @@ class SquidCache {
         findOptions: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     ): SquidCache {
         const whereOptions = Array.isArray(findOptions) ? findOptions : [findOptions]
-        this.deferredFindList.set(entityConstructor, [
-            ...(this.deferredFindList.get(entityConstructor) || []),
+        this.deferredFindWhereList.set(entityConstructor, [
+            ...(this.deferredFindWhereList.get(entityConstructor) || []),
             ...whereOptions,
         ])
         return this
@@ -127,8 +134,24 @@ class SquidCache {
     /**
      * Get entity by id form cache
      */
-    get<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): EntityClass<T> | null {
+    get<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): T | null {
         return (this.entities.get(entityConstructor) || new Map()).get(id) || null
+    }
+
+    /**
+     * Get all entities of specific class.
+     * Returns a new iterator object that contains the values for
+     * each element in the Map object in insertion order.
+     */
+    getAll<T extends EntityLike>(entityConstructor: EntityClass<T>): IterableIterator<T> | [] {
+        return (this.entities.get(entityConstructor) || new Map()).values() || null
+    }
+
+    /**
+     * Check by ID if entity is existing in cache
+     */
+    has<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): boolean {
+        return (this.entities.get(entityConstructor) || new Map()).has(id)
     }
 
     /**
@@ -142,7 +165,11 @@ class SquidCache {
      * Set/update item in cache by id
      * (maybe id prop can be omitted as each entity must have id field)
      */
-    upsert<T extends EntityLike>(entityOrList: UpsetEntityOrList<T>): void {
+    upsert<T extends EntityLike>(entity: T): void
+    upsert<T extends EntityLike>(entities: T[]): void
+    upsert<T extends EntityLike>(entityOrList: T | T[]): void {
+        if (Array.isArray(entityOrList) && entityOrList.length === 0) return
+
         const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
             .constructor as EntityClass<T>
         const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>()
@@ -159,17 +186,17 @@ class SquidCache {
      * If there were upsets after Cache.load()
      */
     isDirty(): boolean {
-        return this.deferredGetList.size > 0 || this.deferredFindList.size > 0
+        return this.deferredGetList.size > 0 || this.deferredFindWhereList.size > 0
     }
 
     /**
-     * Load all deferred get from the db, clear deferredGet and deferredFindList items list,
+     * Load all deferred get from the db, clear deferredGet and deferredFindWhereList items list,
      * set loaded items to cache storage.
      */
     async load(): Promise<void> {
         assert(this.processorContext)
 
-        for (const [entityClass, findOptionsList] of this.deferredFindList.entries()) {
+        for (const [entityClass, findOptionsList] of this.deferredFindWhereList.entries()) {
             const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
 
             const entitiesList = await this.processorContext.store.find(entityClass, {
@@ -187,7 +214,18 @@ class SquidCache {
             const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
 
             /**
-             * Filter items by "id" which are already fetched accordingly "deferredFindList".
+             * Fetch all available entities of iterated class.
+             */
+            if (idsSet.has('*')) {
+                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
+                    entityClass
+                )
+                this.upsert(entitiesList)
+                continue
+            }
+
+            /**
+             * Filter items by "id" which are already fetched accordingly "deferredFindWhereList".
              * As result avoid duplicated fetch.
              */
             const filteredIds = [...idsSet.values()].filter(
@@ -257,7 +295,7 @@ class SquidCache {
         }
 
         this.deferredGetList.clear()
-        this.deferredFindList.clear()
+        this.deferredFindWhereList.clear()
         return Promise.resolve()
     }
 

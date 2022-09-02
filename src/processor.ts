@@ -14,6 +14,7 @@ import {
     Token,
     LiquidityPosition,
     Transaction,
+    Pool,
 } from './model'
 import { SwapStatPeriod, SwapPeriod } from './model/custom/swapStat'
 import { Between, Not, In } from 'typeorm'
@@ -22,7 +23,7 @@ import { BaseMapper, EntityClass, EntityMap } from './mappers/baseMapper'
 import { NewPairMapper } from './mappers/factory'
 import { BurnMapper, MintMapper, SwapMapper, SyncMapper, TransferMapper } from './mappers/pairs'
 import { TokenSwapMapper } from './mappers/swapFlashLoan'
-import SquidCache from './utils/squid-cache.ts'
+import SquidCache from './utils/squid-cache'
 
 const database = new TypeormDatabase()
 const processor = new SubstrateBatchProcessor()
@@ -39,11 +40,11 @@ const processor = new SubstrateBatchProcessor()
     .addEvmLog('*', {
         filter: [
             [
-                pair.events['Transfer(address,address,uint256)'].topic,
+                // pair.events['Transfer(address,address,uint256)'].topic,
                 pair.events['Sync(uint112,uint112)'].topic,
                 pair.events['Swap(address,uint256,uint256,uint256,uint256,address)'].topic,
-                pair.events['Mint(address,uint256,uint256)'].topic,
-                pair.events['Burn(address,uint256,uint256,address)'].topic,
+                // pair.events['Mint(address,uint256,uint256)'].topic,
+                // pair.events['Burn(address,uint256,uint256,address)'].topic,
             ],
         ],
     })
@@ -57,16 +58,31 @@ const processor = new SubstrateBatchProcessor()
     })
 
 processor.run(database, async (ctx) => {
-    // TODO POC functionality
+
+    // SquidCache.init(ctx, [
+    //     Pair,
+    //     Swapper,
+    //     UniswapFactory,
+    //     Bundle,
+    //     Token,
+    //     Transaction,
+    //     Pool,
+    //     [LiquidityPosition, { pair: Pair }],
+    //     [TokenSwapEvent, { transaction: Transaction, tokenSold: Token }],
+    // ])
+
     SquidCache.init(ctx, [
-        [UniswapFactory],
-        [Bundle],
-        [Token],
-        [Pair],
-        [LiquidityPosition, { pair: Pair }],
-        [Transaction],
-        [TokenSwapEvent, { transaction: Transaction, tokenSold: Token }],
+        Pair,
+        Swapper,
+        UniswapFactory,
+        Bundle,
+        Token,
+        Transaction,
+        Pool,
+        LiquidityPosition,
+        TokenSwapEvent
     ])
+
     const mappers: BaseMapper<any>[] = []
 
     for (const block of ctx.blocks) {
@@ -81,51 +97,26 @@ processor.run(database, async (ctx) => {
         }
     }
 
-    const requests = new Map<EntityClass, Set<string>>()
     for (const mapper of mappers) {
         for (const [entityClass, ids] of mapper.getRequest()) {
-            // const oldRequest = requests.get(entityClass) || new Set()
-            // requests.set(entityClass, new Set([...oldRequest, ...ids]))
-            // TODO POC functionality
             SquidCache.deferredGet(entityClass, ids)
         }
     }
 
-    // const entities = new EntityMap()
-    // for (const [entityClass, ids] of requests) {
-    //     const e: Map<string, any> = await ctx.store
-    //         .find(entityClass, { where: { id: In([...ids]) } })
-    //         .then((es) => new Map(es.map((e: any) => [e.id, e])))
-    //     entities.set(entityClass, e)
-    // }
+    SquidCache.deferredGet(Token)
 
-    // entities.set(Token, await ctx.store.find(Token, {}).then((es) => new Map(es.map((e: any) => [e.id, e]))))
-    // TODO POC functionality
-    SquidCache.deferredGet(Token, '*')
-
-    // TODO POC functionality
     await SquidCache.load()
 
     for (const mapper of mappers) {
-        // await mapper.process(entities)
-        // TODO POC functionality
         await mapper.process()
     }
 
-    // await ctx.store.save([...entities.get(UniswapFactory).values()])
-    // await ctx.store.save([...entities.get(Bundle).values()])
-    // await ctx.store.save([...entities.get(Token).values()])
-    // await ctx.store.save([...entities.get(Pair).values()])
-    // await ctx.store.save([...entities.get(LiquidityPosition).values()])
-    // await ctx.store.save([...entities.get(Transaction).values()])
-    // await ctx.store.save([...entities.get(TokenSwapEvent).values()])
-    // TODO POC functionality
     await SquidCache.flush()
     SquidCache.purge()
 
-    for (const [entityClass, entity] of entities) {
-        ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
-    }
+    // for (const [entityClass, entity] of entities) {
+    //     ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
+    // }
 
     const lastBlock = ctx.blocks[ctx.blocks.length - 1].header
     await updateTop(ctx, lastBlock)
@@ -180,11 +171,7 @@ let lastUpdateTopTimestamp: number | undefined
 
 async function updateTop(ctx: BatchContext<Store, unknown>, block: SubstrateBlock) {
     if (lastUpdateTopTimestamp == null) {
-        // const swapStat = await ctx.store.findOneBy(SwapStatPeriod, { id: SwapPeriod.DAY })
-        // TODO POC functionality
-        await SquidCache.deferredGet(SwapStatPeriod, SwapPeriod.DAY).load()
-        const swapStat = SquidCache.get(SwapStatPeriod, SwapPeriod.DAY)
-
+        const swapStat = await ctx.store.findOneBy(SwapStatPeriod, { id: SwapPeriod.DAY })
         lastUpdateTopTimestamp = swapStat?.to.getTime() || -topUpdateInterval
     }
 

@@ -57,10 +57,10 @@ export class TokenSwapMapper extends BaseMapper<TokenSwapData> {
 
         const usdPrice = 1
 
-        const pool = await getOrCreatePool.call(this, SquidCache, poolId)
+        const pool = await getOrCreatePool.call(this, poolId)
 
-        const tokenSold = await getOrCreateToken.call(this, SquidCache, pool.tokens[soldId])
-        const tokenBought = await getOrCreateToken.call(this, SquidCache, pool.tokens[boughtId])
+        const tokenSold = await getOrCreateToken.call(this, pool.tokens[soldId].toLowerCase())
+        const tokenBought = await getOrCreateToken.call(this, pool.tokens[boughtId].toLowerCase())
 
         const exchange = new TokenSwapEvent({
             id: 'token_exchange-' + txHash,
@@ -79,7 +79,6 @@ export class TokenSwapMapper extends BaseMapper<TokenSwapData> {
                 .mul(usdPrice),
         })
 
-        // entities.get(TokenSwapEvent).set(exchange.id, exchange)
-        SquidCache.upsert(exchange.id, exchange)
+        SquidCache.upsert(exchange)
     }
 }

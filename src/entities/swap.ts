@@ -20,45 +20,22 @@ interface SwapInfo {
     lpToken: string
 }
 
-// export async function getOrCreatePool(this: BaseMapper<any>, entities: EntityMap, address: string): Promise<Pool> {
-//     let pool = entities.get(Pool).get(address)
-//     if (pool) return pool
-//
-//     pool = await this.ctx.store.get(Pool, address)
-//     if (pool) {
-//         entities.get(Pool).set(address, pool)
-//         return pool
-//     }
-//
-//     const info = await getSwapInfo.call(this, address)
-//
-//     pool = new Pool({
-//         id: address.toLowerCase(),
-//         numTokens: info.tokens.length,
-//         tokens: (await registerTokens.call(this, entities, info.tokens)).map((t) => t.id),
-//         a: info.a,
-//         balances: info.balances,
-//         lpToken: info.lpToken,
-//         swapFee: info.swapFee,
-//         adminFee: info.adminFee,
-//         virtualPrice: info.virtualPrice,
-//         owner: info.owner,
-//     })
-//     entities.get(Pool).set(address, pool)
-//
-//     return pool
-// }
-
-export async function getOrCreatePool(this: BaseMapper<any>, squidCache: typeof SquidCache, address: string): Promise<Pool> {
-    let pool = squidCache.get(Pool, address)
+export async function getOrCreatePool(this: BaseMapper<any>, address: string): Promise<Pool> {
+    let pool = SquidCache.get(Pool, address)
     if (pool) return pool
+
+    // pool = await this.ctx.store.get(Pool, address)
+    // if (pool) {
+    //     entities.get(Pool).set(address, pool)
+    //     return pool
+    // }
 
     const info = await getSwapInfo.call(this, address)
 
     pool = new Pool({
         id: address.toLowerCase(),
         numTokens: info.tokens.length,
-        tokens: (await registerTokens.call(this, squidCache, info.tokens)).map((t) => t.id),
+        tokens: (await registerTokens.call(this, info.tokens)).map((t) => t.id),
         a: info.a,
         balances: info.balances,
         lpToken: info.lpToken,
@@ -67,7 +44,7 @@ export async function getOrCreatePool(this: BaseMapper<any>, squidCache: typeof 
         virtualPrice: info.virtualPrice,
         owner: info.owner,
     })
-    squidCache.upsert(pool)
+    SquidCache.upsert(pool)
 
     return pool
 }
@@ -83,13 +60,13 @@ export async function getSwapInfo(this: BaseMapper<any>, address: string): Promi
     while (true) {
         try {
             const t = await swapContract.getToken(i)
-            const b = (await swapContract.getTokenBalance(i)).toBigInt()
+            const b = await swapContract.getTokenBalance(i)
 
             if (t != ZERO_ADDRESS) {
-                tokens.push(t)
+                tokens.push(t.toLowerCase())
             }
 
-            balances.push(b)
+            balances.push(b.toBigInt())
 
             i++
         } catch (e) {
@@ -126,14 +103,14 @@ export async function getBalancesSwap(
     return balances
 }
 
-async function registerTokens(this: BaseMapper<any>, entities: EntityMap, list: string[]): Promise<Token[]> {
+async function registerTokens(this: BaseMapper<any>, list: string[]): Promise<Token[]> {
     const result: Token[] = []
 
     for (let i = 0; i < list.length; ++i) {
         const current = list[i]
 
         if (current != ZERO_ADDRESS) {
-            const token = await getOrCreateToken.call(this, entities, current)
+            const token = await getOrCreateToken.call(this, current)
 
             result.push(token)
         }

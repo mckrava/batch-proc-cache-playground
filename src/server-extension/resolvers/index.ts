@@ -46,9 +46,6 @@ class SwapperObject {
 
     @Field(() => String, { nullable: false })
     amountUSD!: string
-
-    @Field(() => [SwapDayVolumeObject], { nullable: false })
-    volumesPerDay!: SwapDayVolumeObject[]
 }
 
 @ObjectType()
@@ -220,7 +217,6 @@ export class TradersResolver {
                                     : range === Range.WEEK
                                     ? s.weekAmountUSD
                                     : s.monthAmountUSD,
-                            volumesPerDay: daysInfo.get(s.id),
                         })
                 )
                 .sort((a, b) =>
@@ -228,7 +224,7 @@ export class TradersResolver {
                         .minus(b.amountUSD)
                         .mul(order === Order.DESC ? -1 : 1)
                         .toNumber()
-                ),
+                ).filter((u) => BigDecimal(u.amountUSD).gt(0)),
         })
     }
 }

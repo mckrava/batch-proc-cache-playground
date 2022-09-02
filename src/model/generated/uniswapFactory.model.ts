@@ -14,19 +14,19 @@ export class UniswapFactory {
   @Column_("int4", {nullable: false})
   pairCount!: number
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalVolumeUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalVolumeETH!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   untrackedVolumeUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalLiquidityUSD!: BigDecimal
 
-  @Column_("numeric", {nullable: false, precision: 38, scale: 20, transformer: bigDecimalTransformer})
+  @Column_("numeric", {nullable: false, transformer: bigDecimalTransformer})
   totalLiquidityETH!: BigDecimal
 
   @Column_("int4", {nullable: false})

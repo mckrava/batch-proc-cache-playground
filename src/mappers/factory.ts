@@ -4,6 +4,7 @@ import { Bundle, Pair, UniswapFactory, Token } from '../model'
 import * as factoryAbi from '../types/abi/factory'
 import { ZERO_BD } from '../consts'
 import { getOrCreateToken } from '../entities/token'
+import SquidCache from '../utils/squid-cache'
 
 interface NewPairData {
     blockNumber: number
@@ -42,13 +43,13 @@ export class NewPairMapper extends BaseMapper<NewPairData> {
         }
     }
 
-    async process(entities: EntityMap) {
+    async process() {
         if (this.data == null) return
 
         const { pairId, token0Id, token1Id, factoryId, blockNumber, timestamp } = this.data
 
-        let factory = entities.get(UniswapFactory).get(factoryId)
-        if (factory == null) {
+        let factory = SquidCache.get(UniswapFactory, factoryId)
+        if (factory === null) {
             factory = new UniswapFactory({
                 id: factoryId,
                 pairCount: 0,
@@ -60,21 +61,24 @@ export class NewPairMapper extends BaseMapper<NewPairData> {
                 txCount: 0,
             })
 
-            entities.get(UniswapFactory).set(factory.id, factory)
+            // entities.get(UniswapFactory).set(factory.id, factory)
+            SquidCache.upsert(factory)
         }
 
-        let bundle = entities.get(Bundle).get('1')
+        // let bundle = entities.get(Bundle).get('1')
+        let bundle = SquidCache.get(Bundle,'1')
         if (bundle == null) {
             bundle = new Bundle({
                 id: '1',
                 ethPrice: ZERO_BD,
             })
-            entities.get(Bundle).set(bundle.id, bundle)
+            // entities.get(Bundle).set(bundle.id, bundle)
+            SquidCache.upsert(bundle)
         }
 
         // create the tokens
-        const token0 = await getOrCreateToken.call(this, entities, token0Id)
-        const token1 = await getOrCreateToken.call(this, entities, token1Id)
+        const token0 = await getOrCreateToken.call(this, token0Id)
+        const token1 = await getOrCreateToken.call(this, token1Id)
 
         const pair = new Pair({
             id: pairId,
@@ -98,6 +102,7 @@ export class NewPairMapper extends BaseMapper<NewPairData> {
             token1Price: ZERO_BD,
         })
 
-        entities.get(Pair).set(pair.id, pair)
+        // entities.get(Pair).set(pair.id, pair)
+        SquidCache.upsert(pair)
     }
 }
