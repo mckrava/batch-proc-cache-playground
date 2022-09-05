@@ -66,7 +66,7 @@ export class NewPairMapper extends BaseMapper<NewPairData> {
         }
 
         // let bundle = entities.get(Bundle).get('1')
-        let bundle = SquidCache.get(Bundle,'1')
+        let bundle = SquidCache.get(Bundle, '1')
         if (bundle == null) {
             bundle = new Bundle({
                 id: '1',

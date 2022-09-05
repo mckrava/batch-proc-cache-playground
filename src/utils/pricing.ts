@@ -4,7 +4,7 @@ import { getOrCreateToken } from '../entities/token'
 import { Pair } from '../model'
 import { BaseMapper, EntityMap } from '../mappers/baseMapper'
 import assert from 'assert'
-import SquidCache from '../utils/squid-cache'
+import SquidCache from './squid-cache'
 
 export const WGLMR_ADDRESS = '0xAcc15dC74880C9944775448304B263D191c6077F'.toLowerCase() //Replace with wrapped glint
 export const WGLMR_USDC_ADDRESS = '0xb929914B89584b4081C7966AC6287636F7EfD053'.toLowerCase() //replace with wglint usdc LP address
@@ -44,7 +44,7 @@ export async function findEthPerToken(this: BaseMapper<unknown>, tokenId: string
 
     // loop through whitelist and check if paired with any
     for (let i = 0; i < WHITELIST.length; i++) {
-        let pair = [...SquidCache.getAll(Pair)].find((p) => {
+        let pair = [...SquidCache.values(Pair)].find((p) => {
             return (
                 (p.token0Id === WHITELIST[i] && p.token1Id === tokenId) ||
                 (p.token1Id === WHITELIST[i] && p.token0Id === tokenId)

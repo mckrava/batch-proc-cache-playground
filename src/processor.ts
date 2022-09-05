@@ -59,29 +59,31 @@ const processor = new SubstrateBatchProcessor()
 
 processor.run(database, async (ctx) => {
 
+    SquidCache.init(ctx, [
+        // Pair,
+        UniswapFactory,
+        Bundle,
+        Token,
+        [Pair, { token0: true, token1: true }],
+        Pool,
+        LiquidityPosition,
+        Transaction,
+        TokenSwapEvent,
+        Swapper,
+    ])
+
     // SquidCache.init(ctx, [
-    //     Pair,
+    //     // Pair,
+    //     [Pair, { token0: Token, token1: Token }],
     //     Swapper,
     //     UniswapFactory,
     //     Bundle,
     //     Token,
     //     Transaction,
     //     Pool,
-    //     [LiquidityPosition, { pair: Pair }],
-    //     [TokenSwapEvent, { transaction: Transaction, tokenSold: Token }],
+    //     LiquidityPosition,
+    //     TokenSwapEvent,
     // ])
-
-    SquidCache.init(ctx, [
-        Pair,
-        Swapper,
-        UniswapFactory,
-        Bundle,
-        Token,
-        Transaction,
-        Pool,
-        LiquidityPosition,
-        TokenSwapEvent
-    ])
 
     const mappers: BaseMapper<any>[] = []
 
@@ -99,11 +101,11 @@ processor.run(database, async (ctx) => {
 
     for (const mapper of mappers) {
         for (const [entityClass, ids] of mapper.getRequest()) {
-            SquidCache.deferredGet(entityClass, ids)
+            SquidCache.deferredLoad(entityClass, ids)
         }
     }
 
-    SquidCache.deferredGet(Token)
+    SquidCache.deferredLoad(Token)
 
     await SquidCache.load()
 
@@ -111,12 +113,23 @@ processor.run(database, async (ctx) => {
         await mapper.process()
     }
 
-    await SquidCache.flush()
-    SquidCache.purge()
+    // SquidCache.entries().forEach((val, key) => {
+    //     if (key.name === 'Pair') {
+    //         SquidCache.entries().forEach((val, key) => {
+    //             console.log('-------------------')
+    //             console.log('Class - ', key.name)
+    //             console.log('Val class entries - ', [...val.entries()])
+    //         })
+    //     }
+    // })
 
-    // for (const [entityClass, entity] of entities) {
-    //     ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
-    // }
+    await SquidCache.flush()
+
+    for (const [entityClass, entity] of SquidCache.entries().entries()) {
+        ctx.log.info(`saved ${entity.size} ${entityClass.name}`)
+    }
+
+    SquidCache.purge()
 
     const lastBlock = ctx.blocks[ctx.blocks.length - 1].header
     await updateTop(ctx, lastBlock)
