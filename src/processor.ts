@@ -58,7 +58,6 @@ const processor = new SubstrateBatchProcessor()
     })
 
 processor.run(database, async (ctx) => {
-
     SquidCache.init(ctx, [
         // Pair,
         UniswapFactory,
@@ -112,16 +111,6 @@ processor.run(database, async (ctx) => {
     for (const mapper of mappers) {
         await mapper.process()
     }
-
-    // SquidCache.entries().forEach((val, key) => {
-    //     if (key.name === 'Pair') {
-    //         SquidCache.entries().forEach((val, key) => {
-    //             console.log('-------------------')
-    //             console.log('Class - ', key.name)
-    //             console.log('Val class entries - ', [...val.entries()])
-    //         })
-    //     }
-    // })
 
     await SquidCache.flush()
 

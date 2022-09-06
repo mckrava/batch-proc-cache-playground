@@ -8,7 +8,6 @@ import { BatchContext } from '@subsquid/substrate-processor'
 
 type EntityLike = {
     id: string
-    // [k: string]: string | number | null | EntityLike
 }
 
 type EntityClassConstructable = EntityClass<EntityLike>
@@ -135,16 +134,16 @@ class SquidCache {
      * Cache.get() method.
      */
     deferredRemove<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
-        const idsList = this.deferredRemoveList.get(entityConstructor) || new Set()
+        const defRemIdsList = this.deferredRemoveList.get(entityConstructor) || new Set()
 
         for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
-            idsList.add(idItem)
+            defRemIdsList.add(idItem)
         }
-        this.deferredRemoveList.set(entityConstructor, idsList)
+        this.deferredRemoveList.set(entityConstructor, defRemIdsList)
 
         const cachedEntities = this.entities.get(entityConstructor) || new Map()
         let isIntersection = false
-        idsList.forEach((defRemItemId) => {
+        defRemIdsList.forEach((defRemItemId) => {
             if (cachedEntities.has(defRemItemId)) {
                 cachedEntities.delete(defRemItemId)
                 isIntersection = true
@@ -379,6 +378,10 @@ class SquidCache {
 
     /**
      * Persist all updates to the db.
+     *
+     * "this.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
+     * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
+     * they won't be accidentally saved into DB.
      */
     async flush(): Promise<void> {
         assert(this.processorContext)
