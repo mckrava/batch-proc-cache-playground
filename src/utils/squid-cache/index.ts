@@ -1,43 +1,42 @@
-import { Store, EntityClass } from '@subsquid/typeorm-store'
-import { In, FindOptionsWhere } from 'typeorm'
-import assert from 'assert'
-import { BatchContext } from '@subsquid/substrate-processor'
+import { Store, EntityClass } from '@subsquid/typeorm-store';
+import { In, FindOptionsWhere } from 'typeorm';
+import assert from 'assert';
+import { BatchContext } from '@subsquid/substrate-processor';
 // import { FindManyOptions } from '@subsquid/typeorm-store/src/store'
 // import type { FindOptionsRelations, FindOneOptions } from 'typeorm'
 // import { FindOneOptions, EntityClass } from '@subsquid/typeorm-store';
 
 type EntityLike = {
-    id: string
-}
+    id: string;
+};
 
-type EntityClassConstructable = EntityClass<EntityLike>
+type EntityClassConstructable = EntityClass<EntityLike>;
 
 type CacheEntityParams =
     | EntityClassConstructable
-    | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>] // Inherited from FindOneOptions['loadRelationIds']['relations']
+    | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>]; // Inherited from FindOneOptions['loadRelationIds']['relations']
 
 type CachedModel<T> = {
     [P in keyof T]: Exclude<T[P], null | undefined> extends EntityLike
         ? null | undefined extends T[P]
             ? EntityLike | null | undefined
             : EntityLike
-        : T[P]
-} &
-    EntityLike
+        : T[P];
+} & EntityLike;
 
 class SquidCache {
-    static instance: SquidCache
+    static instance: SquidCache;
 
-    private processorContext: BatchContext<Store, unknown> | null = null
+    private processorContext: BatchContext<Store, unknown> | null = null;
 
-    private entityRelationsParams = new Map<EntityClassConstructable, Record<string, EntityClassConstructable> | null>()
-    private cacheClassesMap = new Map<string, EntityClassConstructable>()
-    private entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>()
-    private entitiesForFlush = new Map<EntityClassConstructable, Set<string>>()
+    private entityRelationsParams = new Map<EntityClassConstructable, Record<string, EntityClassConstructable> | null>();
+    private cacheClassesMap = new Map<string, EntityClassConstructable>();
+    private entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
+    private entitiesForFlush = new Map<EntityClassConstructable, Set<string>>();
 
-    private deferredGetList = new Map<EntityClassConstructable, Set<string>>()
-    private deferredFindWhereList = new Map<EntityClassConstructable, FindOptionsWhere<EntityClassConstructable>[]>()
-    private deferredRemoveList = new Map<EntityClassConstructable, Set<string>>()
+    private deferredGetList = new Map<EntityClassConstructable, Set<string>>();
+    private deferredFindWhereList = new Map<EntityClassConstructable, FindOptionsWhere<EntityClassConstructable>[]>();
+    private deferredRemoveList = new Map<EntityClassConstructable, Set<string>>();
 
     /**
      * Initialize cache entities Map and relations config for fetching data in
@@ -57,20 +56,20 @@ class SquidCache {
      *          constraint "FK_f74dc53460944a424b56b8f7da5"
      */
     init(ctx: BatchContext<Store, unknown>, entityRelationsParams: CacheEntityParams[]): void {
-        this.processorContext = ctx
+        this.processorContext = ctx;
         for (const paramsItem of entityRelationsParams) {
-            let entityClass = paramsItem as EntityClassConstructable
-            let relations = null
+            let entityClass = paramsItem as EntityClassConstructable;
+            let relations = null;
 
             if (Array.isArray(paramsItem)) {
-                entityClass = paramsItem[0]
-                relations = paramsItem[1]
+                entityClass = paramsItem[0];
+                relations = paramsItem[1];
             }
 
-            this.entityRelationsParams.set(entityClass, relations)
-            this.cacheClassesMap.set(entityClass.name, entityClass)
-            this.entities.set(entityClass, new Map<string, CachedModel<EntityClassConstructable>>())
-            this.entitiesForFlush.set(entityClass, new Set<string>())
+            this.entityRelationsParams.set(entityClass, relations);
+            this.cacheClassesMap.set(entityClass.name, entityClass);
+            this.entities.set(entityClass, new Map<string, CachedModel<EntityClassConstructable>>());
+            this.entitiesForFlush.set(entityClass, new Set<string>());
         }
     }
 
@@ -78,19 +77,19 @@ class SquidCache {
      * Get initialized cache instance
      */
     static getInstance(): SquidCache {
-        if (!this.instance) this.instance = new SquidCache()
-        return this.instance
+        if (!this.instance) this.instance = new SquidCache();
+        return this.instance;
     }
 
     /**
      * Add request for loading all entities of defined class.
      */
-    deferredLoad<T extends EntityLike>(entityConstructor: EntityClass<T>): SquidCache
+    deferredLoad<T extends EntityLike>(entityConstructor: EntityClass<T>): SquidCache;
     /**
      * Add ids of entities which should be loaded, resolved after Cache.load()
      * (keeps items as Map structure).
      */
-    deferredLoad<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): SquidCache
+    deferredLoad<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): SquidCache;
     /**
      * Add requests for find entities by "FindManyOptions" parameters.
      * Can be useful if user needs fetch list of entities by id with
@@ -100,31 +99,31 @@ class SquidCache {
     deferredLoad<T extends EntityLike>(
         entityConstructor: EntityClass<T>,
         findOptions?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    ): SquidCache
+    ): SquidCache;
 
     deferredLoad<T extends EntityLike>(
         entityConstructor: EntityClass<T>,
         opt?: string | string[] | FindOptionsWhere<T> | FindOptionsWhere<T>[]
     ): SquidCache {
         if (!opt) {
-            this.deferredGetList.set(entityConstructor, new Set<string>().add('*'))
-            return this
+            this.deferredGetList.set(entityConstructor, new Set<string>().add('*'));
+            return this;
         } else if (typeof opt === 'string' || Array.isArray(opt)) {
-            const idsList = this.deferredGetList.get(entityConstructor) || new Set()
+            const idsList = this.deferredGetList.get(entityConstructor) || new Set();
 
             for (const idItem of Array.isArray(opt) ? opt : [opt]) {
-                idsList.add(idItem as string)
+                idsList.add(idItem as string);
             }
-            this.deferredGetList.set(entityConstructor, idsList)
+            this.deferredGetList.set(entityConstructor, idsList);
         } else {
-            const whereOptions = Array.isArray(opt) ? opt : [opt]
+            const whereOptions = Array.isArray(opt) ? opt : [opt];
             this.deferredFindWhereList.set(entityConstructor, [
                 ...(this.deferredFindWhereList.get(entityConstructor) || []),
-                ...whereOptions,
-            ])
+                ...whereOptions
+            ]);
         }
 
-        return this
+        return this;
     }
 
     /**
@@ -134,37 +133,37 @@ class SquidCache {
      * Cache.get() method.
      */
     deferredRemove<T extends EntityLike>(entityConstructor: EntityClass<T>, idOrList: string | string[]): SquidCache {
-        const defRemIdsList = this.deferredRemoveList.get(entityConstructor) || new Set()
+        const defRemIdsList = this.deferredRemoveList.get(entityConstructor) || new Set();
 
         for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
-            defRemIdsList.add(idItem)
+            defRemIdsList.add(idItem);
         }
-        this.deferredRemoveList.set(entityConstructor, defRemIdsList)
+        this.deferredRemoveList.set(entityConstructor, defRemIdsList);
 
-        const cachedEntities = this.entities.get(entityConstructor) || new Map()
-        let isIntersection = false
+        const cachedEntities = this.entities.get(entityConstructor) || new Map();
+        let isIntersection = false;
         defRemIdsList.forEach((defRemItemId) => {
             if (cachedEntities.has(defRemItemId)) {
-                cachedEntities.delete(defRemItemId)
-                isIntersection = true
+                cachedEntities.delete(defRemItemId);
+                isIntersection = true;
             }
-        })
-        if (isIntersection) this.entities.set(entityConstructor, cachedEntities)
-        return this
+        });
+        if (isIntersection) this.entities.set(entityConstructor, cachedEntities);
+        return this;
     }
 
     /**
      * Check by ID if entity is existing in cache
      */
     has<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): boolean {
-        return (this.entities.get(entityConstructor) || new Map()).has(id)
+        return (this.entities.get(entityConstructor) || new Map()).has(id);
     }
 
     /**
      * Get entity by id form cache
      */
     get<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): T | null {
-        return (this.entities.get(entityConstructor) || new Map()).get(id) || null
+        return (this.entities.get(entityConstructor) || new Map()).get(id) || null;
     }
 
     /**
@@ -173,74 +172,74 @@ class SquidCache {
      * each element in the Map object in insertion order.
      */
     values<T extends EntityLike>(entityConstructor: EntityClass<T>): IterableIterator<T> | [] {
-        return (this.entities.get(entityConstructor) || new Map()).values() || null
+        return (this.entities.get(entityConstructor) || new Map()).values() || null;
     }
 
     /**
      * Returns full cache data
      */
     entries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>> {
-        return this.entities
+        return this.entities;
     }
 
     /**
      * Delete entity item from cache storage of the specific class
      */
     delete<T extends EntityLike>(entityConstructor: EntityClass<T>, id: string): void {
-        if (!this.entities.has(entityConstructor)) return
-        this.entities.get(entityConstructor)!.delete(id)
+        if (!this.entities.has(entityConstructor)) return;
+        this.entities.get(entityConstructor)!.delete(id);
     }
 
     /**
      * Delete all entities of specific class from cache storage
      */
     clear<T extends EntityLike>(entityConstructor: EntityClass<T>): void {
-        if (!this.entities.has(entityConstructor)) return
-        this.entities.get(entityConstructor)!.clear()
+        if (!this.entities.has(entityConstructor)) return;
+        this.entities.get(entityConstructor)!.clear();
     }
 
     private _upsert<T extends CachedModel<T>>(entityOrList: T | T[], setForFlush: boolean): void {
-        if (Array.isArray(entityOrList) && entityOrList.length === 0) return
+        if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
         const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
-            .constructor as EntityClass<T>
-        const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>()
-        const existingEntitiesForFlush = this.entitiesForFlush.get(entityClassConstructor) || new Set<string>()
+            .constructor as EntityClass<T>;
+        const existingEntities = this.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>();
+        const existingEntitiesForFlush = this.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
 
         for (let entity of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
-            let entityDecorated = entity
+            let entityDecorated = entity;
             for (const entityFieldName in entity) {
-                let fieldValue = entity[entityFieldName]
+                let fieldValue = entity[entityFieldName];
 
                 if (typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue)) {
-                    const fieldValueDecorated = fieldValue as unknown as EntityLike
-                    if (!this.cacheClassesMap.has(fieldValueDecorated.constructor.name)) continue
+                    const fieldValueDecorated = fieldValue as unknown as EntityLike;
+                    if (!this.cacheClassesMap.has(fieldValueDecorated.constructor.name)) continue;
 
-                    const relationsClass = this.cacheClassesMap.get(fieldValueDecorated.constructor.name)
-                    assert(relationsClass)
-                    this._upsert(fieldValue as EntityClassConstructable[keyof EntityClassConstructable], false)
+                    const relationsClass = this.cacheClassesMap.get(fieldValueDecorated.constructor.name);
+                    assert(relationsClass);
+                    this._upsert(fieldValue as EntityClassConstructable[keyof EntityClassConstructable], false);
                     entityDecorated[entityFieldName as keyof T] = {
-                        id: fieldValueDecorated.id,
-                    } as unknown as T[keyof T]
+                        id: fieldValueDecorated.id
+                    } as unknown as T[keyof T];
                 }
             }
 
-            existingEntities.set(entityDecorated.id, entityDecorated)
-            if (setForFlush) existingEntitiesForFlush.add(entity.id)
+            existingEntities.set(entityDecorated.id, entityDecorated);
+            if (setForFlush) existingEntitiesForFlush.add(entity.id);
         }
 
-        this.entities.set(entityClassConstructor, existingEntities)
-        if (setForFlush) this.entitiesForFlush.set(entityClassConstructor, existingEntitiesForFlush)
+        this.entities.set(entityClassConstructor, existingEntities);
+        if (setForFlush) this.entitiesForFlush.set(entityClassConstructor, existingEntitiesForFlush);
     }
 
     /**
      * Set/update item in cache by id.
      * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
      */
-    upsert<T extends CachedModel<T>>(entities: T[]): void
-    upsert<T extends CachedModel<T>>(entity: T): void
+    upsert<T extends CachedModel<T>>(entities: T[]): void;
+    upsert<T extends CachedModel<T>>(entity: T): void;
     upsert<T extends CachedModel<T>>(entityOrList: T | T[]): void {
-        this._upsert(entityOrList, true)
+        this._upsert(entityOrList, true);
     }
 
     /**
@@ -248,45 +247,42 @@ class SquidCache {
      * set loaded items to cache storage.
      */
     async load(): Promise<void> {
-        assert(this.processorContext)
+        assert(this.processorContext);
 
         for (const [entityClass, findOptionsList] of this.deferredFindWhereList.entries()) {
-            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass);
 
             const entitiesList = await this.processorContext.store.find(entityClass, {
                 where: findOptionsList,
                 ...(!!entityRelationsOptions && {
                     loadRelationIds: {
                         relations: Object.keys(entityRelationsOptions || {}) || [],
-                        disableMixedMap: true,
-                    },
-                }),
-            })
-            this._upsert(entitiesList, false)
+                        disableMixedMap: true
+                    }
+                })
+            });
+            this._upsert(entitiesList, false);
         }
 
         for (const [entityClass, idsSet] of this.deferredGetList.entries()) {
-            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass);
 
             /**
              * Fetch all available entities of iterated class.
              */
             if (idsSet.has('*')) {
-                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
-                    entityClass,
-                    {
-                        where: {},
-                        ...(!!entityRelationsOptions && {
-                            loadRelationIds: {
-                                relations: Object.keys(entityRelationsOptions || {}) || [],
-                                disableMixedMap: true,
-                            },
-                        }),
-                    }
-                )
+                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(entityClass, {
+                    where: {},
+                    ...(!!entityRelationsOptions && {
+                        loadRelationIds: {
+                            relations: Object.keys(entityRelationsOptions || {}) || [],
+                            disableMixedMap: true
+                        }
+                    })
+                });
 
-                this._upsert(entitiesList, false)
-                continue
+                this._upsert(entitiesList, false);
+                continue;
             }
 
             /**
@@ -295,63 +291,58 @@ class SquidCache {
              */
             const filteredIds = [...idsSet.values()].filter(
                 (id) => !(this.entities.get(entityClass) || new Set<string>()).has(id)
-            )
+            );
 
-            if (!filteredIds || filteredIds.length === 0) continue
+            if (!filteredIds || filteredIds.length === 0) continue;
 
-            const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
-                entityClass,
-                {
-                    where: { id: In(filteredIds) },
-                    ...(!!entityRelationsOptions && {
-                        loadRelationIds: {
-                            relations: Object.keys(entityRelationsOptions || {}) || [],
-                            disableMixedMap: true,
-                        },
-                    }),
-                }
-            )
+            const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(entityClass, {
+                where: { id: In(filteredIds) },
+                ...(!!entityRelationsOptions && {
+                    loadRelationIds: {
+                        relations: Object.keys(entityRelationsOptions || {}) || [],
+                        disableMixedMap: true
+                    }
+                })
+            });
 
-            this._upsert(entitiesList, false)
+            this._upsert(entitiesList, false);
         }
 
         /**
          * Separate list of relations from all deferredLoad items for further load
          */
-        const relationsEntitiesIdsMap = new Map<EntityClassConstructable, Set<string>>()
+        const relationsEntitiesIdsMap = new Map<EntityClassConstructable, Set<string>>();
 
         /**
          * Collect entity relations IDs.
          */
         for (const [entityClass, entitiesMap] of this.entities.entries()) {
-            const entityRelationsOptions = this.entityRelationsParams.get(entityClass)
+            const entityRelationsOptions = this.entityRelationsParams.get(entityClass);
 
-            if (entitiesMap.size === 0 || !entityRelationsOptions) continue
+            if (entitiesMap.size === 0 || !entityRelationsOptions) continue;
 
             for (const entityItem of entitiesMap.values()) {
                 for (const relationName in entityRelationsOptions) {
-                    const relationEntityClass = this.cacheClassesMap.get(
-                        Object.getPrototypeOf(entityItem).constructor.name
-                    )
-                    if (!relationEntityClass) continue
+                    const relationEntityClass = this.cacheClassesMap.get(Object.getPrototypeOf(entityItem).constructor.name);
+                    if (!relationEntityClass) continue;
 
                     /**
                      * Relations entity value is loaded from DB in view {id: string} | null
                      */
                     const relationEntityId = entityItem[
                         relationName as keyof CachedModel<EntityClassConstructable>
-                    ] as unknown as { id: string } | null
+                        ] as unknown as { id: string } | null;
 
-                    if (!relationEntityId) continue
+                    if (!relationEntityId) continue;
                     /**
                      * If entity is already loaded, we need avoid extra fetch.
                      */
-                    if ((this.entities.get(relationEntityClass) || new Map()).has(relationEntityId.id)) continue
+                    if ((this.entities.get(relationEntityClass) || new Map()).has(relationEntityId.id)) continue;
 
                     relationsEntitiesIdsMap.set(
                         relationEntityClass,
                         (relationsEntitiesIdsMap.get(relationEntityClass) || new Set()).add(relationEntityId.id)
-                    )
+                    );
                 }
             }
         }
@@ -361,19 +352,16 @@ class SquidCache {
              * Fetch relations in this load flow is ignored and only one level of relations are supported.
              */
             for (const [entityClass, idsSet] of relationsEntitiesIdsMap.entries()) {
-                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(
-                    entityClass,
-                    {
-                        where: { id: In([...idsSet.values()]) },
-                    }
-                )
+                const entitiesList: CachedModel<typeof entityClass>[] = await this.processorContext.store.find(entityClass, {
+                    where: { id: In([...idsSet.values()]) }
+                });
 
-                this._upsert(entitiesList, false)
+                this._upsert(entitiesList, false);
             }
         }
 
-        this.deferredGetList.clear()
-        this.deferredFindWhereList.clear()
+        this.deferredGetList.clear();
+        this.deferredFindWhereList.clear();
     }
 
     /**
@@ -384,40 +372,42 @@ class SquidCache {
      * they won't be accidentally saved into DB.
      */
     async flush(): Promise<void> {
-        assert(this.processorContext)
-        for (const entities of this.entities.values()) {
-            await this.processorContext.store.save(
-                [...entities.values()].filter((entity) =>
-                    (this.entitiesForFlush.get(Object.getPrototypeOf(entity)) || new Set<string>()).has(entity.id)
-                )
-            )
+        assert(this.processorContext);
+
+        for (const [entityClass, entities] of this.entities.entries()) {
+            const forFlush = this.entitiesForFlush.get(entityClass) || new Set<string>();
+            const listForSave = [...entities.entries()]
+                .filter(([id, entity]) => forFlush.has(id))
+                .map(([id, entity]) => entity);
+
+            await this.processorContext.store.save(listForSave);
         }
         for (const [entityClass, idsSet] of this.deferredRemoveList.entries()) {
-            await this.processorContext.store.remove(entityClass, [...idsSet.values()])
+            await this.processorContext.store.remove(entityClass, [...idsSet.values()]);
         }
-        this.deferredRemoveList.clear()
+        this.deferredRemoveList.clear();
     }
 
     /**
      * Purge current cache.
      */
     purge(): void {
-        this.entities.clear()
+        this.entities.clear();
     }
 
     /**
      * If there are unresolved gets
      */
     ready(): boolean {
-        return false
+        return false;
     }
 
     /**
      * If there were upsets after Cache.load()
      */
     isDirty(): boolean {
-        return this.deferredGetList.size > 0 || this.deferredFindWhereList.size > 0
+        return this.deferredGetList.size > 0 || this.deferredFindWhereList.size > 0;
     }
 }
 
-export default SquidCache.getInstance()
+export default SquidCache.getInstance();
